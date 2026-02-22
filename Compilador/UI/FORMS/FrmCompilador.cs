@@ -196,6 +196,15 @@ namespace Compilador.UI.Forms
             }
         }
 
-       
+        private void btnCompilar_Click(object sender, EventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(txtEditor.Text))
+            {
+                MessageBox.Show("El editor esta vacio", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            txtEstatus.AppendText("Analizador lexico iniciado...\r\n");
+        }
     }
 }

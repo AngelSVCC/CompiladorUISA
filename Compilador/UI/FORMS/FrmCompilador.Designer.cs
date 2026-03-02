@@ -90,6 +90,7 @@
             btnCompilar.Size = new Size(88, 53);
             btnCompilar.Text = "Compilar";
             btnCompilar.TextImageRelation = TextImageRelation.ImageAboveText;
+            btnCompilar.Click += btnCompilar_Click;
             // 
             // btnTema
             // 

@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -13,6 +12,7 @@ using System.Windows.Forms;
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using Compilador.Core;
 
 namespace Compilador.UI.Forms
 {
@@ -204,7 +204,13 @@ namespace Compilador.UI.Forms
                 return;
             }
 
-            txtEstatus.AppendText("Analizador lexico iniciado...\r\n");
+            txtTokens.Clear();
+            txtEstatus.Clear();
+
+            txtEstatus.AppendText("Ha iniciado el léxico" + Environment.NewLine);
+
+            var fuente = CodigoFuente.DesdeTexto(txtEditor.Text);
         }
+
     }
 }

@@ -195,22 +195,21 @@ namespace Compilador.UI.Forms
                 MessageBox.Show("Error al guardar el archivo: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
-
         private void btnCompilar_Click(object sender, EventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(txtEditor.Text))
-            {
-                MessageBox.Show("El editor esta vacio", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            txtTokens.Clear();
             txtEstatus.Clear();
-
+            txtTokens.Clear();
             txtEstatus.AppendText("Ha iniciado el léxico" + Environment.NewLine);
-
             var fuente = CodigoFuente.DesdeTexto(txtEditor.Text);
-        }
+            var analizador = new AnalizadorLexico();
+            var resultado = analizador.Analizar(fuente);
 
+            MessageBox.Show($"Avisos: {resultado.Avisos.Count} | Tokens: {resultado.Tokens.Count}"); // <-- aquí
+
+            foreach (var aviso in resultado.Avisos)
+                txtEstatus.AppendText(aviso + Environment.NewLine);
+            foreach (var token in resultado.Tokens)
+                txtTokens.AppendText($"[{token.Tipo}] {token.Lexema} (L{token.Linea})" + Environment.NewLine);
+        }
     }
 }

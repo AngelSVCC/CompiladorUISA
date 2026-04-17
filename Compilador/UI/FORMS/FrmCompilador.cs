@@ -1,18 +1,18 @@
-﻿using System;
+﻿using Compilador.Core;
+using Compilador.UI.CORE;
+using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Drawing;
 using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-
 using System.Windows.Forms;
-using System;
-using System.Drawing;
 using System.Windows.Forms;
-using Compilador.Core;
 
 namespace Compilador.UI.Forms
 {
@@ -29,6 +29,7 @@ namespace Compilador.UI.Forms
             AplicarTemaClaro();
 
             btnTema.Click += BtnTema_Click;
+            btnSalir.Click += btnSalir_Click;
         }
 
 
@@ -200,16 +201,45 @@ namespace Compilador.UI.Forms
             txtEstatus.Clear();
             txtTokens.Clear();
             txtEstatus.AppendText("Ha iniciado el léxico" + Environment.NewLine);
+
             var fuente = CodigoFuente.DesdeTexto(txtEditor.Text);
             var analizador = new AnalizadorLexico();
             var resultado = analizador.Analizar(fuente);
 
-            MessageBox.Show($"Avisos: {resultado.Avisos.Count} | Tokens: {resultado.Tokens.Count}"); // <-- aquí
-
             foreach (var aviso in resultado.Avisos)
                 txtEstatus.AppendText(aviso + Environment.NewLine);
-            foreach (var token in resultado.Tokens)
-                txtTokens.AppendText($"[{token.Tipo}] {token.Lexema} (L{token.Linea})" + Environment.NewLine);
+
+            int lineasConTokens = resultado.Tokens
+                .Select(t => t.Linea)
+                .Distinct()
+                .Count();
+
+            txtEstatus.AppendText($"Líneas procesadas: {fuente.NumeroLineas}" + Environment.NewLine);
+            txtEstatus.AppendText($"Total de tokens: {resultado.Tokens.Count}" + Environment.NewLine);
+
+            txtTokens.Text = resultado.ObtenerTokensAgrupados();
+
+            txtEstatus.AppendText("Sintáctico INICIADO" + Environment.NewLine);
+
+            var analizadorSintactico = new AnalizadorSintactico();
+            analizadorSintactico.Parse(resultado.Tokens);
+
+            if (analizadorSintactico.Errores.Count == 0)
+            {
+                txtEstatus.AppendText("Análisis Sintáctico finalizado con éxito" + Environment.NewLine);
+            }
+            else
+            {
+                foreach (var error in analizadorSintactico.Errores)
+                {
+                    txtEstatus.AppendText(error + Environment.NewLine);
+                }
+            }
+        }
+
+        private void btnSalir_Click(object sender, EventArgs e)
+        {
+            Application.Exit();
         }
     }
 }

@@ -13,10 +13,9 @@ namespace Compilador.UI.CORE
 
         public List<string> Errores = new List<string>();
 
-        // ── Constantes de tokens
         private const int TKN_ID = 101;
         private const int TKN_VAR = 102;
-        private const int TKN_INT = 103;   // int / integer
+        private const int TKN_INT = 103;
         private const int TKN_FLOAT = 104;
         private const int TKN_IF = 105;
         private const int TKN_THEN = 106;
@@ -30,43 +29,55 @@ namespace Compilador.UI.CORE
         private const int TKN_WRITELN = 114;
         private const int TKN_DO = 115;
 
-        private const int TKN_ENTERO = 200;   // literal entero
-        private const int TKN_REAL = 201;   // literal real
+        private const int TKN_ENTERO = 200;
+        private const int TKN_REAL = 201;
 
-        private const int TKN_SEMICOL = 300;   // ;
-        private const int TKN_PLUS = 301;   // +
-        private const int TKN_MINUS = 317;   // -
-        private const int TKN_DIV = 302;   // /
-        private const int TKN_MUL = 303;   // *
-        private const int TKN_ASSIGN = 304;   // :=
-        private const int TKN_COLON = 311;   // :
-        private const int TKN_LPAREN = 312;   // (
-        private const int TKN_RPAREN = 313;   // )
-        private const int TKN_COMMA = 316;   // ,
-        private const int TKN_DOT = 320;   // .
+        private const int TKN_SEMICOL = 300;
+        private const int TKN_PLUS = 301;
+        private const int TKN_MINUS = 317;
+        private const int TKN_DIV = 302;
+        private const int TKN_MUL = 303;
+        private const int TKN_ASSIGN = 304;
+        private const int TKN_COLON = 311;
+        private const int TKN_LPAREN = 312;
+        private const int TKN_RPAREN = 313;
+        private const int TKN_COMMA = 316;
+        private const int TKN_DOT = 320;
 
-        // ═══════════════════════════════════════════════════════════════
-        // ENTRADA
-        // ═══════════════════════════════════════════════════════════════
+        private const int TWN_COMENTARIO = 400;
+
         public void Parse(List<Token> tokensTotales)
         {
-            _tokens = tokensTotales.ToList();
+            _tokens = tokensTotales
+                          .Where(t => t.Tipo != TWN_COMENTARIO)
+                          .ToList();
+
+            Errores.Clear();
             _posicionActual = 0;
-            _tokenActual = _tokens.Count > 0 ? _tokens[0] : null;
+
+            if (_tokens.Count == 0)
+            {
+                Errores.Add("El código fuente está vacío o no generó tokens válidos.");
+                return;
+            }
+
+            _tokenActual = _tokens[_posicionActual];
 
             try
             {
                 ParsePrograma();
+
+                if (_posicionActual < _tokens.Count && _tokenActual != null)
+                    Errores.Add($"Error en línea {_tokenActual.Linea}: " +
+                                $"Tokens inesperados después del fin del programa " +
+                                $"('{_tokenActual.Lexema}').");
             }
             catch (Exception ex)
             {
-                Errores.Add("Error sintáctico inesperado: " + ex.Message);
+                Errores.Add(ex.Message);
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // CONTROL DE TOKENS
-        // ═══════════════════════════════════════════════════════════════
         private void Avanzar()
         {
             _posicionActual++;
@@ -84,32 +95,35 @@ namespace Compilador.UI.CORE
 
         private void MatchTipo(int tipo, string mensaje)
         {
-            if (CheckTipo(tipo))
+            if (_tokenActual != null && _tokenActual.Tipo == tipo)
             {
                 Avanzar();
             }
             else
             {
                 string encontrado = _tokenActual != null ? _tokenActual.Lexema : "EOF";
-                Errores.Add($"[Error Sintáctico] {mensaje} — encontrado: '{encontrado}'");
-                // No avanzar para no perder sincronía; el llamador decide
+                int linea = _tokenActual?.Linea ?? 0;
+                throw new Exception(
+                    $"Error sintáctico en línea {linea}: {mensaje}. Encontrado '{encontrado}'.");
             }
         }
 
         private void MatchLexema(string esperado, string mensaje)
         {
-            if (CheckLexema(esperado))
+            if (_tokenActual != null &&
+                string.Equals(_tokenActual.Lexema, esperado, StringComparison.OrdinalIgnoreCase))
             {
                 Avanzar();
             }
             else
             {
                 string encontrado = _tokenActual != null ? _tokenActual.Lexema : "EOF";
-                Errores.Add($"[Error Sintáctico] {mensaje} — encontrado: '{encontrado}'");
+                int linea = _tokenActual?.Linea ?? 0;
+                throw new Exception(
+                    $"Error sintáctico en línea {linea}: {mensaje}. Encontrado '{encontrado}'.");
             }
         }
 
-        // ── Versión que sí avanza aunque haya error (recuperación de pánico mínima)
         private void MatchTipoForzado(int tipo, string mensaje)
         {
             if (CheckTipo(tipo)) Avanzar();
@@ -132,23 +146,17 @@ namespace Compilador.UI.CORE
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // PRODUCCIONES
-        // ═══════════════════════════════════════════════════════════════
-
-        // <programa> ::= PROGRAM id ; <bloque> .
         private void ParsePrograma()
         {
-            MatchTipo(TKN_PROGRAM, "Se esperaba 'program'");
+            MatchTipo(TKN_PROGRAM, "Se esperaba 'PROGRAM'");
             MatchTipo(TKN_ID, "Se esperaba identificador del programa");
-            MatchTipo(TKN_SEMICOL, "Se esperaba ';'");
+            MatchLexema(";", "Falta ';' después del identificador del programa");
 
             ParseBloque();
 
-            MatchTipo(TKN_DOT, "Se esperaba '.' al final del programa");
+            MatchLexema(".", "Falta '.' al finalizar el programa");
         }
 
-        // <bloque> ::= [VAR <declaraciones>] BEGIN <sentencias> END
         private void ParseBloque()
         {
             if (CheckTipo(TKN_VAR))
@@ -157,21 +165,18 @@ namespace Compilador.UI.CORE
             ParseSentenciaCompuesta();
         }
 
-        // <seccion-var> ::= VAR <lista-declaraciones>
         private void ParseSeccionVar()
         {
             MatchTipo(TKN_VAR, "Se esperaba 'var'");
             ParseListaDeclaraciones();
         }
 
-        // <lista-declaraciones> ::= <declaracion> { <declaracion> }
         private void ParseListaDeclaraciones()
         {
             while (CheckTipo(TKN_ID))
                 ParseDeclaracion();
         }
 
-        // <declaracion> ::= id { , id } : tipo ;
         private void ParseDeclaracion()
         {
             MatchTipo(TKN_ID, "Se esperaba identificador");
@@ -187,7 +192,6 @@ namespace Compilador.UI.CORE
             MatchTipo(TKN_SEMICOL, "Se esperaba ';'");
         }
 
-        // <tipo> ::= INTEGER | INT | REAL | FLOAT
         private void ParseTipo()
         {
             if (CheckTipo(TKN_INT) || CheckTipo(TKN_FLOAT) ||
@@ -204,7 +208,6 @@ namespace Compilador.UI.CORE
             }
         }
 
-        // <sentencia-compuesta> ::= BEGIN <lista-sentencias> END
         private void ParseSentenciaCompuesta()
         {
             MatchTipo(TKN_BEGIN, "Se esperaba 'begin'");
@@ -212,7 +215,6 @@ namespace Compilador.UI.CORE
             MatchTipo(TKN_END, "Se esperaba 'end'");
         }
 
-        // <lista-sentencias> ::= <sentencia> { ; <sentencia> }
         private void ParseListaSentencias()
         {
             ParseSentencia();
@@ -220,14 +222,12 @@ namespace Compilador.UI.CORE
             while (CheckTipo(TKN_SEMICOL))
             {
                 Avanzar();
-                // ';' después de END es el separador del programa, no de sentencia
                 if (CheckTipo(TKN_END) || _tokenActual == null)
                     break;
                 ParseSentencia();
             }
         }
 
-        // <sentencia> ::= asignacion | if | while | begin-end | write | writeln | ε
         private void ParseSentencia()
         {
             if (_tokenActual == null) return;
@@ -237,7 +237,7 @@ namespace Compilador.UI.CORE
             else if (CheckTipo(TKN_WHILE)) ParseWhile();
             else if (CheckTipo(TKN_BEGIN)) ParseSentenciaCompuesta();
             else if (CheckTipo(TKN_WRITE)) ParseWrite();
-            else if (CheckTipo(TKN_WRITELN)) ParseWrite();   // writeln igual que write
+            else if (CheckTipo(TKN_WRITELN)) ParseWrite();
             else if (CheckTipo(TKN_ID)) ParseAsignacion();
             else
             {
@@ -247,7 +247,6 @@ namespace Compilador.UI.CORE
             }
         }
 
-        // <asignacion> ::= id := <expresion>
         private void ParseAsignacion()
         {
             MatchTipo(TKN_ID, "Se esperaba identificador");
@@ -255,7 +254,6 @@ namespace Compilador.UI.CORE
             ParseExpresion();
         }
 
-        // <if> ::= IF <expr> THEN <sentencia> [ELSE <sentencia>]
         private void ParseIf()
         {
             MatchTipo(TKN_IF, "Se esperaba 'if'");
@@ -270,7 +268,6 @@ namespace Compilador.UI.CORE
             }
         }
 
-        // <while> ::= WHILE <expr> DO <sentencia>
         private void ParseWhile()
         {
             MatchTipo(TKN_WHILE, "Se esperaba 'while'");
@@ -279,11 +276,9 @@ namespace Compilador.UI.CORE
             ParseSentencia();
         }
 
-        // <write> ::= WRITE [ ( <expr> { , <expr> } ) ]
-        // <writeln> ::= WRITELN [ ( <expr> { , <expr> } ) ]
         private void ParseWrite()
         {
-            Avanzar(); // consumir WRITE o WRITELN
+            Avanzar();
 
             if (CheckTipo(TKN_LPAREN))
             {
@@ -298,12 +293,7 @@ namespace Compilador.UI.CORE
 
                 MatchTipo(TKN_RPAREN, "Se esperaba ')'");
             }
-            // Si no hay paréntesis, WRITE sin argumentos → válido
         }
-
-        // ═══════════════════════════════════════════════════════════════
-        // EXPRESIONES
-        // ═══════════════════════════════════════════════════════════════
 
         private void ParseExpresion()
         {

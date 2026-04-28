@@ -28,13 +28,13 @@ namespace Compilador.UI.CORE
         private const int TKN_WRITE = 113;
         private const int TKN_WRITELN = 114;
         private const int TKN_DO = 115;
+        private const int TKN_PROCEDURE = 116;
 
         private const int TKN_ENTERO = 200;
         private const int TKN_REAL = 201;
 
         private const int TKN_SEMICOL = 300;
         private const int TKN_PLUS = 301;
-        private const int TKN_MINUS = 317;
         private const int TKN_DIV = 302;
         private const int TKN_MUL = 303;
         private const int TKN_ASSIGN = 304;
@@ -42,10 +42,14 @@ namespace Compilador.UI.CORE
         private const int TKN_LPAREN = 312;
         private const int TKN_RPAREN = 313;
         private const int TKN_COMMA = 316;
+        private const int TKN_MINUS = 317;
         private const int TKN_DOT = 320;
 
         private const int TWN_COMENTARIO = 400;
 
+        // ═══════════════════════════════════════════════════════════════
+        // ENTRADA
+        // ═══════════════════════════════════════════════════════════════
         public void Parse(List<Token> tokensTotales)
         {
             _tokens = tokensTotales
@@ -65,7 +69,7 @@ namespace Compilador.UI.CORE
 
             try
             {
-                ParsePrograma();
+                ParserPrograma();
 
                 if (_posicionActual < _tokens.Count && _tokenActual != null)
                     Errores.Add($"Error en línea {_tokenActual.Linea}: " +
@@ -78,6 +82,9 @@ namespace Compilador.UI.CORE
             }
         }
 
+        // ═══════════════════════════════════════════════════════════════
+        // CONTROL DE TOKENS
+        // ═══════════════════════════════════════════════════════════════
         private void Avanzar()
         {
             _posicionActual++;
@@ -146,53 +153,59 @@ namespace Compilador.UI.CORE
             }
         }
 
-        private void ParsePrograma()
+        // ═══════════════════════════════════════════════════════════════
+        // PRODUCCIONES
+        // ═══════════════════════════════════════════════════════════════
+
+        // <programa> ::= PROGRAM id ; <bloque> .
+        private void ParserPrograma()
         {
             MatchTipo(TKN_PROGRAM, "Se esperaba 'PROGRAM'");
             MatchTipo(TKN_ID, "Se esperaba identificador del programa");
             MatchLexema(";", "Falta ';' después del identificador del programa");
 
-            ParseBloque();
+            ParserBloque();
 
             MatchLexema(".", "Falta '.' al finalizar el programa");
         }
 
-        private void ParseBloque()
+        // <bloque> ::= [VAR <declaraciones>] { PROCEDURE <decl-proc> } BEGIN <instrucciones> END
+        private void ParserBloque()
         {
             if (CheckTipo(TKN_VAR))
-                ParseSeccionVar();
+                ParserDeclaracionesVariables();
 
-            ParseSentenciaCompuesta();
+            while (CheckTipo(TKN_PROCEDURE))
+                ParserDeclaracionProcedimiento();
+
+            MatchTipo(TKN_BEGIN, "Se esperaba 'BEGIN'");
+            ParserInstrucciones();
+            MatchTipo(TKN_END, "Se esperaba 'END'");
         }
 
-        private void ParseSeccionVar()
+        // <declaraciones-variables> ::= VAR { id { , id } : tipo ; }
+        private void ParserDeclaracionesVariables()
         {
-            MatchTipo(TKN_VAR, "Se esperaba 'var'");
-            ParseListaDeclaraciones();
-        }
+            MatchTipo(TKN_VAR, "Se esperaba 'VAR'");
 
-        private void ParseListaDeclaraciones()
-        {
             while (CheckTipo(TKN_ID))
-                ParseDeclaracion();
-        }
-
-        private void ParseDeclaracion()
-        {
-            MatchTipo(TKN_ID, "Se esperaba identificador");
-
-            while (CheckTipo(TKN_COMMA))
             {
-                Avanzar();
-                MatchTipo(TKN_ID, "Se esperaba identificador después de ','");
-            }
+                MatchTipo(TKN_ID, "Se esperaba identificador de variable");
 
-            MatchTipo(TKN_COLON, "Se esperaba ':'");
-            ParseTipo();
-            MatchTipo(TKN_SEMICOL, "Se esperaba ';'");
+                while (CheckLexema(","))
+                {
+                    Avanzar();
+                    MatchTipo(TKN_ID, "Se esperaba identificador después de la ','");
+                }
+
+                MatchLexema(":", "Falta ':' en la declaración de variable");
+                ParserTipo();
+                MatchLexema(";", "Falta ';' al final de la declaración de variable");
+            }
         }
 
-        private void ParseTipo()
+        // <tipo> ::= INTEGER | INT | REAL | FLOAT
+        private void ParserTipo()
         {
             if (CheckTipo(TKN_INT) || CheckTipo(TKN_FLOAT) ||
                 CheckLexema("integer") || CheckLexema("int") ||
@@ -203,133 +216,162 @@ namespace Compilador.UI.CORE
             else
             {
                 string encontrado = _tokenActual != null ? _tokenActual.Lexema : "EOF";
-                Errores.Add($"[Error Sintáctico] Se esperaba tipo (int/integer/real/float) — encontrado: '{encontrado}'");
+                Errores.Add($"[Error Sintáctico] Se esperaba tipo (int/integer/real/float) " +
+                            $"— encontrado: '{encontrado}'");
                 Avanzar();
             }
         }
 
-        private void ParseSentenciaCompuesta()
+        // <decl-procedimiento> ::= PROCEDURE id ; <bloque> ;
+        private void ParserDeclaracionProcedimiento()
         {
-            MatchTipo(TKN_BEGIN, "Se esperaba 'begin'");
-            ParseListaSentencias();
-            MatchTipo(TKN_END, "Se esperaba 'end'");
+            MatchTipo(TKN_PROCEDURE, "Se esperaba 'PROCEDURE'");
+            MatchTipo(TKN_ID, "Se esperaba nombre del procedimiento");
+            MatchLexema(";", "Falta ';' después del nombre del procedimiento");
+
+            ParserBloque();
+
+            MatchLexema(";", "Falta ';' después del bloque del procedimiento");
         }
 
-        private void ParseListaSentencias()
+        // <instrucciones> ::= <instruccion> { ; <instruccion> }
+        private void ParserInstrucciones()
         {
-            ParseSentencia();
+            ParserInstruccion();
 
             while (CheckTipo(TKN_SEMICOL))
             {
                 Avanzar();
                 if (CheckTipo(TKN_END) || _tokenActual == null)
                     break;
-                ParseSentencia();
+                ParserInstruccion();
             }
         }
 
-        private void ParseSentencia()
+        // <instruccion> ::= asignacion | if | while | begin-end | write | writeln | llamada | ε
+        private void ParserInstruccion()
         {
             if (_tokenActual == null) return;
             if (CheckTipo(TKN_END)) return;
 
-            if (CheckTipo(TKN_IF)) ParseIf();
-            else if (CheckTipo(TKN_WHILE)) ParseWhile();
-            else if (CheckTipo(TKN_BEGIN)) ParseSentenciaCompuesta();
-            else if (CheckTipo(TKN_WRITE)) ParseWrite();
-            else if (CheckTipo(TKN_WRITELN)) ParseWrite();
-            else if (CheckTipo(TKN_ID)) ParseAsignacion();
+            if (CheckTipo(TKN_IF)) ParserIf();
+            else if (CheckTipo(TKN_WHILE)) ParserWhile();
+            else if (CheckTipo(TKN_BEGIN)) ParserBloqueCompuesto();
+            else if (CheckTipo(TKN_WRITE)) ParserWrite();
+            else if (CheckTipo(TKN_WRITELN)) ParserWrite();
+            else if (CheckTipo(TKN_ID)) ParserAsignacionOLlamada();
             else
             {
                 string encontrado = _tokenActual.Lexema;
-                Errores.Add($"[Error Sintáctico] Sentencia inválida — encontrado: '{encontrado}'");
+                Errores.Add($"[Error Sintáctico] Instrucción inválida — encontrado: '{encontrado}'");
                 Avanzar();
             }
         }
 
-        private void ParseAsignacion()
+        // Bloque compuesto anidado: BEGIN <instrucciones> END
+        private void ParserBloqueCompuesto()
         {
-            MatchTipo(TKN_ID, "Se esperaba identificador");
-            MatchTipo(TKN_ASSIGN, "Se esperaba ':='");
-            ParseExpresion();
+            MatchTipo(TKN_BEGIN, "Se esperaba 'BEGIN'");
+            ParserInstrucciones();
+            MatchTipo(TKN_END, "Se esperaba 'END'");
         }
 
-        private void ParseIf()
+        // Distingue entre asignación (id :=) y llamada a procedimiento (id solo)
+        private void ParserAsignacionOLlamada()
         {
-            MatchTipo(TKN_IF, "Se esperaba 'if'");
-            ParseExpresion();
-            MatchTipo(TKN_THEN, "Se esperaba 'then'");
-            ParseSentencia();
+            MatchTipo(TKN_ID, "Se esperaba identificador");
+
+            if (CheckTipo(TKN_ASSIGN))
+            {
+                Avanzar();
+                ParserExpresion();
+            }
+            // Si no hay := es una llamada a procedimiento sin parámetros — token ya consumido
+        }
+
+        // <if> ::= IF <expr> THEN <instruccion> [ELSE <instruccion>]
+        private void ParserIf()
+        {
+            MatchTipo(TKN_IF, "Se esperaba 'IF'");
+            ParserExpresion();
+            MatchTipo(TKN_THEN, "Se esperaba 'THEN'");
+            ParserInstruccion();
 
             if (CheckTipo(TKN_ELSE))
             {
                 Avanzar();
-                ParseSentencia();
+                ParserInstruccion();
             }
         }
 
-        private void ParseWhile()
+        // <while> ::= WHILE <expr> DO <instruccion>
+        private void ParserWhile()
         {
-            MatchTipo(TKN_WHILE, "Se esperaba 'while'");
-            ParseExpresion();
-            MatchTipo(TKN_DO, "Se esperaba 'do'");
-            ParseSentencia();
+            MatchTipo(TKN_WHILE, "Se esperaba 'WHILE'");
+            ParserExpresion();
+            MatchTipo(TKN_DO, "Se esperaba 'DO'");
+            ParserInstruccion();
         }
 
-        private void ParseWrite()
+        // <write> ::= WRITE | WRITELN [ ( <expr> { , <expr> } ) ]
+        private void ParserWrite()
         {
             Avanzar();
 
             if (CheckTipo(TKN_LPAREN))
             {
                 Avanzar();
-                ParseExpresion();
+                ParserExpresion();
 
                 while (CheckTipo(TKN_COMMA))
                 {
                     Avanzar();
-                    ParseExpresion();
+                    ParserExpresion();
                 }
 
                 MatchTipo(TKN_RPAREN, "Se esperaba ')'");
             }
         }
 
-        private void ParseExpresion()
+        // ═══════════════════════════════════════════════════════════════
+        // EXPRESIONES
+        // ═══════════════════════════════════════════════════════════════
+
+        private void ParserExpresion()
         {
-            ParseExpresionSimple();
+            ParserExpresionSimple();
 
             if (EsOperadorRelacional())
             {
                 Avanzar();
-                ParseExpresionSimple();
+                ParserExpresionSimple();
             }
         }
 
-        private void ParseExpresionSimple()
+        private void ParserExpresionSimple()
         {
-            ParseTermino();
+            ParserTermino();
 
             while (CheckTipo(TKN_PLUS) || CheckTipo(TKN_MINUS) || CheckLexema("or"))
             {
                 Avanzar();
-                ParseTermino();
+                ParserTermino();
             }
         }
 
-        private void ParseTermino()
+        private void ParserTermino()
         {
-            ParseFactor();
+            ParserFactor();
 
             while (CheckTipo(TKN_MUL) || CheckTipo(TKN_DIV) ||
                    CheckLexema("div") || CheckLexema("mod") || CheckLexema("and"))
             {
                 Avanzar();
-                ParseFactor();
+                ParserFactor();
             }
         }
 
-        private void ParseFactor()
+        private void ParserFactor()
         {
             if (CheckTipo(TKN_ID) || CheckTipo(TKN_ENTERO) || CheckTipo(TKN_REAL))
             {
@@ -338,13 +380,13 @@ namespace Compilador.UI.CORE
             else if (CheckTipo(TKN_LPAREN))
             {
                 Avanzar();
-                ParseExpresion();
+                ParserExpresion();
                 MatchTipo(TKN_RPAREN, "Se esperaba ')'");
             }
             else if (CheckLexema("not"))
             {
                 Avanzar();
-                ParseFactor();
+                ParserFactor();
             }
             else
             {

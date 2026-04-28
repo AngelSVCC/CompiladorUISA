@@ -157,7 +157,6 @@ namespace Compilador.UI.CORE
         // PRODUCCIONES
         // ═══════════════════════════════════════════════════════════════
 
-        // <programa> ::= PROGRAM id ; <bloque> .
         private void ParserPrograma()
         {
             MatchTipo(TKN_PROGRAM, "Se esperaba 'PROGRAM'");
@@ -169,7 +168,6 @@ namespace Compilador.UI.CORE
             MatchLexema(".", "Falta '.' al finalizar el programa");
         }
 
-        // <bloque> ::= [VAR <declaraciones>] { PROCEDURE <decl-proc> } BEGIN <instrucciones> END
         private void ParserBloque()
         {
             if (CheckTipo(TKN_VAR))
@@ -183,7 +181,6 @@ namespace Compilador.UI.CORE
             MatchTipo(TKN_END, "Se esperaba 'END'");
         }
 
-        // <declaraciones-variables> ::= VAR { id { , id } : tipo ; }
         private void ParserDeclaracionesVariables()
         {
             MatchTipo(TKN_VAR, "Se esperaba 'VAR'");
@@ -204,155 +201,121 @@ namespace Compilador.UI.CORE
             }
         }
 
-        // <tipo> ::= INTEGER | INT | REAL | FLOAT
         private void ParserTipo()
         {
-            if (CheckTipo(TKN_INT) || CheckTipo(TKN_FLOAT) ||
-                CheckLexema("integer") || CheckLexema("int") ||
-                CheckLexema("real") || CheckLexema("float"))
+            if (_tokenActual.Tipo == TKN_INT)
+            {
+                Avanzar();
+            }
+            else if (_tokenActual.Tipo == TKN_FLOAT)
             {
                 Avanzar();
             }
             else
             {
-                string encontrado = _tokenActual != null ? _tokenActual.Lexema : "EOF";
-                Errores.Add($"[Error Sintáctico] Se esperaba tipo (int/integer/real/float) " +
-                            $"— encontrado: '{encontrado}'");
-                Avanzar();
+                throw new Exception(
+                    $"Error sintáctico en línea {_tokenActual.Linea}: " +
+                    $"Se esperaba un tipo de dato válido (INT o FLOAT).");
             }
         }
 
-        // <decl-procedimiento> ::= PROCEDURE id ; <bloque> ;
         private void ParserDeclaracionProcedimiento()
         {
             MatchTipo(TKN_PROCEDURE, "Se esperaba 'PROCEDURE'");
             MatchTipo(TKN_ID, "Se esperaba nombre del procedimiento");
-            MatchLexema(";", "Falta ';' después del nombre del procedimiento");
+
+            if (CheckLexema("("))
+            {
+                Avanzar();
+
+                if (_tokenActual.Tipo == TKN_ID)
+                {
+                    MatchTipo(TKN_ID, "Identificador de parámetro");
+                    MatchLexema(":", "Falta ':'");
+                    ParserTipo();
+                }
+
+                MatchLexema(")", "Falta ')'");
+            }
+
+            MatchLexema(";", "Falta ';' después de cabecera de procedimiento");
 
             ParserBloque();
 
-            MatchLexema(";", "Falta ';' después del bloque del procedimiento");
+            MatchLexema(";", "Falta ';' después de cuerpo de procedimiento");
         }
 
-        // <instrucciones> ::= <instruccion> { ; <instruccion> }
         private void ParserInstrucciones()
         {
             ParserInstruccion();
 
-            while (CheckTipo(TKN_SEMICOL))
+            while (CheckLexema(";"))
             {
                 Avanzar();
-                if (CheckTipo(TKN_END) || _tokenActual == null)
-                    break;
-                ParserInstruccion();
+                if (_tokenActual.Tipo != TKN_END)
+                    ParserInstruccion();
             }
         }
 
-        // <instruccion> ::= asignacion | if | while | begin-end | write | writeln | llamada | ε
         private void ParserInstruccion()
         {
             if (_tokenActual == null) return;
-            if (CheckTipo(TKN_END)) return;
 
-            if (CheckTipo(TKN_IF)) ParserIf();
-            else if (CheckTipo(TKN_WHILE)) ParserWhile();
-            else if (CheckTipo(TKN_BEGIN)) ParserBloqueCompuesto();
-            else if (CheckTipo(TKN_WRITE)) ParserWrite();
-            else if (CheckTipo(TKN_WRITELN)) ParserWrite();
-            else if (CheckTipo(TKN_ID)) ParserAsignacionOLlamada();
-            else
+            if (CheckTipo(TKN_ID))
             {
-                string encontrado = _tokenActual.Lexema;
-                Errores.Add($"[Error Sintáctico] Instrucción inválida — encontrado: '{encontrado}'");
                 Avanzar();
+                MatchLexema(":=", "Se esperaba operador de asignación ':='");
+                ParserExpresion();
             }
-        }
-
-        // Bloque compuesto anidado: BEGIN <instrucciones> END
-        private void ParserBloqueCompuesto()
-        {
-            MatchTipo(TKN_BEGIN, "Se esperaba 'BEGIN'");
-            ParserInstrucciones();
-            MatchTipo(TKN_END, "Se esperaba 'END'");
-        }
-
-        // Distingue entre asignación (id :=) y llamada a procedimiento (id solo)
-        private void ParserAsignacionOLlamada()
-        {
-            MatchTipo(TKN_ID, "Se esperaba identificador");
-
-            if (CheckTipo(TKN_ASSIGN))
+            else if (CheckTipo(TKN_IF))
             {
                 Avanzar();
                 ParserExpresion();
+                MatchTipo(TKN_THEN, "Se esperaba 'THEN'");
+                ParserInstruccion();
+
+                if (CheckTipo(TKN_ELSE))
+                {
+                    Avanzar();
+                    ParserInstruccion();
+                }
             }
-            // Si no hay := es una llamada a procedimiento sin parámetros — token ya consumido
-        }
-
-        // <if> ::= IF <expr> THEN <instruccion> [ELSE <instruccion>]
-        private void ParserIf()
-        {
-            MatchTipo(TKN_IF, "Se esperaba 'IF'");
-            ParserExpresion();
-            MatchTipo(TKN_THEN, "Se esperaba 'THEN'");
-            ParserInstruccion();
-
-            if (CheckTipo(TKN_ELSE))
+            else if (CheckTipo(TKN_WHILE))
             {
                 Avanzar();
+                ParserExpresion();
+                MatchTipo(TKN_DO, "Se esperaba 'DO'");
                 ParserInstruccion();
             }
-        }
-
-        // <while> ::= WHILE <expr> DO <instruccion>
-        private void ParserWhile()
-        {
-            MatchTipo(TKN_WHILE, "Se esperaba 'WHILE'");
-            ParserExpresion();
-            MatchTipo(TKN_DO, "Se esperaba 'DO'");
-            ParserInstruccion();
-        }
-
-        // <write> ::= WRITE | WRITELN [ ( <expr> { , <expr> } ) ]
-        private void ParserWrite()
-        {
-            Avanzar();
-
-            if (CheckTipo(TKN_LPAREN))
+            else if (CheckTipo(TKN_BEGIN))
             {
                 Avanzar();
+                ParserInstrucciones();
+                MatchTipo(TKN_END, "Se esperaba 'END' en bloque anidado");
+            }
+            else if (CheckTipo(TKN_WRITE) || CheckTipo(TKN_WRITELN) || CheckTipo(TKN_PRINT))
+            {
+                Avanzar();
+                MatchLexema("(", "Falta '(' para función de impresión");
                 ParserExpresion();
 
-                while (CheckTipo(TKN_COMMA))
+                while (CheckLexema(","))
                 {
                     Avanzar();
                     ParserExpresion();
                 }
 
-                MatchTipo(TKN_RPAREN, "Se esperaba ')'");
+                MatchLexema(")", "Falta ')' en la función de impresión");
             }
         }
-
-        // ═══════════════════════════════════════════════════════════════
-        // EXPRESIONES
-        // ═══════════════════════════════════════════════════════════════
 
         private void ParserExpresion()
         {
-            ParserExpresionSimple();
-
-            if (EsOperadorRelacional())
-            {
-                Avanzar();
-                ParserExpresionSimple();
-            }
-        }
-
-        private void ParserExpresionSimple()
-        {
             ParserTermino();
 
-            while (CheckTipo(TKN_PLUS) || CheckTipo(TKN_MINUS) || CheckLexema("or"))
+            while (CheckLexema("+") || CheckLexema("-") || CheckLexema("==") ||
+                   CheckLexema(">") || CheckLexema("<") || CheckLexema(">=") ||
+                   CheckLexema("<=") || CheckLexema("<>"))
             {
                 Avanzar();
                 ParserTermino();
@@ -363,8 +326,7 @@ namespace Compilador.UI.CORE
         {
             ParserFactor();
 
-            while (CheckTipo(TKN_MUL) || CheckTipo(TKN_DIV) ||
-                   CheckLexema("div") || CheckLexema("mod") || CheckLexema("and"))
+            while (CheckLexema("*") || CheckLexema("/"))
             {
                 Avanzar();
                 ParserFactor();
@@ -373,35 +335,27 @@ namespace Compilador.UI.CORE
 
         private void ParserFactor()
         {
-            if (CheckTipo(TKN_ID) || CheckTipo(TKN_ENTERO) || CheckTipo(TKN_REAL))
+            if (_tokenActual.Tipo == TKN_ID)
             {
                 Avanzar();
             }
-            else if (CheckTipo(TKN_LPAREN))
+            else if (_tokenActual.Tipo == TKN_ENTERO || _tokenActual.Tipo == TKN_REAL)
+            {
+                Avanzar();
+            }
+            else if (CheckLexema("("))
             {
                 Avanzar();
                 ParserExpresion();
-                MatchTipo(TKN_RPAREN, "Se esperaba ')'");
-            }
-            else if (CheckLexema("not"))
-            {
-                Avanzar();
-                ParserFactor();
+                MatchLexema(")", "Se esperaba ')' tras expresión");
             }
             else
             {
-                string encontrado = _tokenActual != null ? _tokenActual.Lexema : "EOF";
-                Errores.Add($"[Error Sintáctico] Factor inválido — encontrado: '{encontrado}'");
-                if (_tokenActual != null) Avanzar();
+                throw new Exception(
+                    $"Error sintáctico en línea {_tokenActual.Linea}: " +
+                    $"Se esperaba un FACTOR (Identificador, Número o '('), " +
+                    $"pero se encontró '{_tokenActual.Lexema}'.");
             }
-        }
-
-        private bool EsOperadorRelacional()
-        {
-            if (_tokenActual == null) return false;
-            string l = _tokenActual.Lexema;
-            return l == "=" || l == "<>" || l == "<" ||
-                   l == ">" || l == "<=" || l == ">=";
         }
     }
 }

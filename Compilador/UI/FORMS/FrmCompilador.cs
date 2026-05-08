@@ -1,17 +1,14 @@
 ﻿using Compilador.Core;
 using Compilador.UI.CORE;
 using System;
-using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
-using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.Windows.Forms;
-using System.Windows.Forms;
 using System.Windows.Forms;
 
 namespace Compilador.UI.Forms
@@ -26,12 +23,28 @@ namespace Compilador.UI.Forms
         {
             InitializeComponent();
             InicializarEditor();
+            InicializarGridSimbolos();
             AplicarTemaClaro();
 
             btnTema.Click += BtnTema_Click;
             btnSalir.Click += btnSalir_Click;
         }
 
+        private void InicializarGridSimbolos()
+        {
+            gridSimbolos.Columns.Clear();
+            gridSimbolos.Columns.Add("colNombre", "Nombre");
+            gridSimbolos.Columns.Add("colTipo", "Tipo");
+            gridSimbolos.Columns.Add("colLinea", "Linea");
+
+            gridSimbolos.Columns["colNombre"].Width = 120;
+            gridSimbolos.Columns["colTipo"].Width = 80;
+            gridSimbolos.Columns["colLinea"].Width = 60;
+
+            gridSimbolos.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            gridSimbolos.AllowUserToAddRows = false;
+            gridSimbolos.ReadOnly = true;
+        }
 
         private void InicializarEditor()
         {
@@ -59,7 +72,6 @@ namespace Compilador.UI.Forms
             splitEditor.Panel1.Controls.Add(pnlLineNumbers);
         }
 
-
         private void PnlLineNumbers_Paint(object sender, PaintEventArgs e)
         {
             e.Graphics.Clear(pnlLineNumbers.BackColor);
@@ -68,8 +80,7 @@ namespace Compilador.UI.Forms
                 txtEditor.GetCharIndexFromPosition(new Point(0, 0)));
 
             int lastLine = txtEditor.GetLineFromCharIndex(
-                txtEditor.GetCharIndexFromPosition(
-                    new Point(0, txtEditor.Height)));
+                txtEditor.GetCharIndexFromPosition(new Point(0, txtEditor.Height)));
 
             int lineHeight = txtEditor.Font.Height;
             int y = 2;
@@ -90,7 +101,6 @@ namespace Compilador.UI.Forms
                 y += lineHeight;
             }
         }
-
 
         private void BtnTema_Click(object sender, EventArgs e)
         {
@@ -132,19 +142,22 @@ namespace Compilador.UI.Forms
 
         private void btnNuevo_Click(object sender, EventArgs e)
         {
-            limpiar();
+            Limpiar();
         }
-        private void limpiar()
+
+        private void Limpiar()
         {
             try
             {
                 txtEditor.Clear();
                 txtTokens.Clear();
                 txtEstatus.Clear();
+                gridSimbolos.Rows.Clear();
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error al limpiar los campos: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Error al limpiar los campos: " + ex.Message,
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -155,7 +168,7 @@ namespace Compilador.UI.Forms
                 openFileDialog1.Filter = "Archivos de texto (*.txt)|*.txt|Todos los archivos (*.*)|*.*";
                 if (openFileDialog1.ShowDialog() == DialogResult.OK)
                 {
-                    limpiar();
+                    Limpiar();
                     string filePath = openFileDialog1.FileName;
                     string fileContent = File.ReadAllText(filePath);
                     txtEditor.Text = fileContent;
@@ -169,7 +182,8 @@ namespace Compilador.UI.Forms
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error al abrir el archivo: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Error al abrir el archivo: " + ex.Message,
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -188,19 +202,23 @@ namespace Compilador.UI.Forms
                 {
                     txtEstatus.AppendText("Operación de guardado cancelada." + Environment.NewLine);
                 }
-
-
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error al guardar el archivo: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Error al guardar el archivo: " + ex.Message,
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
         private void btnCompilar_Click(object sender, EventArgs e)
         {
             txtEstatus.Clear();
             txtTokens.Clear();
-            txtEstatus.AppendText("Ha iniciado el léxico" + Environment.NewLine);
+            gridSimbolos.Rows.Clear();
+
+            // ── FASE 1: LÉXICO ────────────────────────────────────────
+            txtEstatus.AppendText("Fase 1 [Léxico ] INICIADO" + Environment.NewLine);
+            txtEstatus.AppendText("Ha iniciado el analizador léxico" + Environment.NewLine);
 
             var fuente = CodigoFuente.DesdeTexto(txtEditor.Text);
             var analizador = new AnalizadorLexico();
@@ -209,32 +227,50 @@ namespace Compilador.UI.Forms
             foreach (var aviso in resultado.Avisos)
                 txtEstatus.AppendText(aviso + Environment.NewLine);
 
-            int lineasConTokens = resultado.Tokens
-                .Select(t => t.Linea)
-                .Distinct()
-                .Count();
-
             txtEstatus.AppendText($"Líneas procesadas: {fuente.NumeroLineas}" + Environment.NewLine);
             txtEstatus.AppendText($"Total de tokens: {resultado.Tokens.Count}" + Environment.NewLine);
 
             txtTokens.Text = resultado.ObtenerTokensAgrupados();
 
-            txtEstatus.AppendText("Sintáctico INICIADO" + Environment.NewLine);
+            txtEstatus.AppendText("Analisis Léxico finalizado con éxito" + Environment.NewLine);
+
+            // ── FASE 2: SINTÁCTICO ────────────────────────────────────
+            txtEstatus.AppendText("Fase 2 [Sintáctico] INICIADO" + Environment.NewLine);
 
             var analizadorSintactico = new AnalizadorSintactico();
             analizadorSintactico.Parse(resultado.Tokens);
 
-            if (analizadorSintactico.Errores.Count == 0)
+            if (analizadorSintactico.Errores.Count > 0)
             {
-                txtEstatus.AppendText("Análisis Sintáctico finalizado con éxito" + Environment.NewLine);
+                foreach (var error in analizadorSintactico.Errores)
+                    txtEstatus.AppendText(error + Environment.NewLine);
+
+                // Si hay errores sintácticos no tiene sentido continuar
+                return;
+            }
+
+            txtEstatus.AppendText("Análisis Sintáctico finalizado con éxito" + Environment.NewLine);
+
+            // ── FASE 3: SEMÁNTICO ─────────────────────────────────────
+            txtEstatus.AppendText("Fase 3 [Semántico] INICIADO" + Environment.NewLine);
+
+            var analizadorSemantico = new AnalizadorSemantico();
+            var tablaSimbolos = analizadorSemantico.Analizar(resultado.Tokens);
+
+            // Mostrar errores semánticos
+            if (analizadorSemantico.Errores.Count > 0)
+            {
+                foreach (var error in analizadorSemantico.Errores)
+                    txtEstatus.AppendText(error + Environment.NewLine);
             }
             else
             {
-                foreach (var error in analizadorSintactico.Errores)
-                {
-                    txtEstatus.AppendText(error + Environment.NewLine);
-                }
+                txtEstatus.AppendText("Análisis Semántico finalizado con éxito" + Environment.NewLine);
             }
+
+            // Llenar tabla de símbolos en el DataGridView
+            foreach (var simbolo in tablaSimbolos.ObtenerTodos())
+                gridSimbolos.Rows.Add(simbolo.Nombre, simbolo.Tipo, simbolo.Linea);
         }
 
         private void btnSalir_Click(object sender, EventArgs e)
